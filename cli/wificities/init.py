@@ -5,7 +5,8 @@ from pathlib import Path
 
 import click
 
-from .themes import get_themes_dir, load_theme_json
+from .themes import load_theme_json, ensure_theme
+from .registry import list_registry, resolve_repo_url, clone_or_update, get_installed_dir
 
 
 @click.command("init")
@@ -29,12 +30,11 @@ def init_cmd(name: str, theme: str | None, raw: bool):
     if raw:
         theme = None
     elif theme is None:
-        themes_dir = get_themes_dir()
-        available = _list_available_themes(themes_dir)
+        available = list_registry("themes")
 
         if available:
             click.echo("\nPick a theme:")
-            for i, (tid, tdesc) in enumerate(available):
+            for i, (tid, tdesc, _verified) in enumerate(available):
                 click.echo(f"  [{i+1}] {tid:20s} — {tdesc}")
             click.echo(f"  [0] {'(none)':20s} — Raw HTML, I'll build my own")
 
@@ -46,11 +46,19 @@ def init_cmd(name: str, theme: str | None, raw: bool):
             else:
                 theme = None
 
+    # Create project dir early so we can download theme into it
+    project_dir.mkdir(parents=True, exist_ok=True)
+
     # Collect theme variables
     theme_vars = {}
     selected_palette = None
     if theme:
-        theme_json = load_theme_json(theme)
+        # Download theme into project
+        theme_dir = ensure_theme(project_dir, theme)
+        if theme_dir is None:
+            click.echo(f"Error: Could not download theme '{theme}'")
+            raise SystemExit(1)
+        theme_json = load_theme_json(project_dir, theme)
         if theme_json:
             # Palette selection (if theme has palettes)
             if "palettes" in theme_json:
@@ -97,8 +105,7 @@ def init_cmd(name: str, theme: str | None, raw: bool):
                     theme_vars[var_name] = click.prompt(f"  {desc}",
                                                         default=default)
 
-    # Create project
-    project_dir.mkdir(parents=True)
+    # Project dir already created above
 
     # Write config.json
     config = {
@@ -199,20 +206,3 @@ def init_cmd(name: str, theme: str | None, raw: bool):
     click.echo(f"  ./wificities build        # build for ESP32")
     click.echo(f"  ./wificities flash        # flash to ESP32")
 
-
-def _list_available_themes(themes_dir: Path) -> list[tuple[str, str]]:
-    """Return list of (theme_id, description) pairs. 'default' theme is always first."""
-    result = []
-    if not themes_dir.exists():
-        return result
-    for d in sorted(themes_dir.iterdir()):
-        if d.is_dir() and (d / "theme.json").exists():
-            try:
-                data = json.loads((d / "theme.json").read_text(encoding="utf-8"))
-                result.append((d.name, data.get("description", "")))
-            except (json.JSONDecodeError, OSError):
-                result.append((d.name, ""))
-
-    # Put 'default' first
-    result.sort(key=lambda x: (0 if x[0] == "default" else 1, x[0]))
-    return result

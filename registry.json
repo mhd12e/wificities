@@ -1,0 +1,27 @@
+{
+  "plugins": {
+    "guestbook": {
+      "repo": "https://github.com/mhd12e/wificities-plugin-guestbook",
+      "description": "Visitors leave messages that persist",
+      "verified": true
+    },
+    "visitor-counter": {
+      "repo": "https://github.com/mhd12e/wificities-plugin-visitor-counter",
+      "description": "Retro hit counter with digit display",
+      "verified": true
+    }
+  },
+  "themes": {
+    "default": {
+      "repo": "https://github.com/mhd12e/wificities-theme-default",
+      "description": "8 color palettes, 3 header styles, fully customizable",
+      "verified": true,
+      "default": true
+    },
+    "geocities-flame": {
+      "repo": "https://github.com/mhd12e/wificities-theme-geocities-flame",
+      "description": "Under construction since 1999. Flames, stars, beveled everything.",
+      "verified": true
+    }
+  }
+}

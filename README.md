@@ -12,59 +12,72 @@ cd wificities
 ./wificities
 ```
 
-First run installs everything automatically (Python venv, dependencies, compiles firmware). Then:
+First run installs everything automatically. Then:
 
 ```
 ./wificities init my-site
-./wificities serve
-./wificities flash
+./wificities build
+./wificities serve           # preview
+./wificities flash           # flash to ESP32
 ```
 
-All commands run from the repo root. No global install, nothing touches your system.
+## Themes & Plugins
 
-## Commands
+Everything is a git repo. Install by name (verified) or by URL (custom):
 
 ```
-./wificities init <name>       # create a new site
-./wificities build             # build for ESP32
-./wificities serve             # preview at localhost:8080
-./wificities flash             # flash to ESP32
-./wificities config            # interactive customization
-./wificities config palette    # change color scheme
-./wificities config header     # change header style
-./wificities config set K V    # set any value
-./wificities theme list        # show themes
-./wificities theme switch X    # change theme
-./wificities plugin list       # show plugins
-./wificities plugin add X      # add a plugin
-./wificities validate          # check for issues
-./wificities uninstall         # remove venv and build cache
+./wificities theme list
+./wificities theme add default
+./wificities theme switch geocities-flame
+
+./wificities plugin list
+./wificities plugin add guestbook
+./wificities plugin add visitor-counter
+./wificities plugin add https://github.com/user/custom-plugin
 ```
+
+Update installed packages:
+
+```
+./wificities theme update
+./wificities plugin update
+```
+
+### Verified Themes
+
+| Theme | Description |
+|-------|-------------|
+| `default` | 8 color palettes, 3 header styles, fully customizable |
+| `geocities-flame` | Under construction since 1999. Full retro aesthetic. |
+
+### Verified Plugins
+
+| Plugin | Description |
+|--------|-------------|
+| `guestbook` | Visitors leave messages that persist |
+| `visitor-counter` | Retro hit counter with digit display |
 
 ## Customize
 
-The interactive config menu lets you change everything:
-
-- **Color palette** — 8 presets: midnight, sunset, ocean, forest, cyberpunk, vaporwave, terminal, newspaper
-- **Individual colors** — tweak any color after picking a palette
-- **Header style** — banner, minimal, or centered
-- **Fonts** — 5 presets or custom CSS fonts
-- **Toggle features** — guestbook, visitor counter, sidebar, marquee, construction banner
-
-After changes: `./wificities build && ./wificities flash --only filesystem`
-
-## Edit Content
-
 ```
-my-site/
-├── config.json          # WiFi SSID, settings
-├── wificities.json      # theme, pages, colors
-└── content/
-    ├── index.md         # homepage (Markdown)
-    └── about.md         # about page
+./wificities config                    # interactive menu
+./wificities config palette vaporwave  # change colors
+./wificities config header centered    # change header
+./wificities config set bio "hi"       # set any value
 ```
 
-Want raw HTML? Pick `(none)` as theme during init.
+## Make Your Own
+
+A theme or plugin is just a git repo. Push to GitHub, install by URL.
+
+**Theme:** `theme.json` + `layouts/` + `templates/` + `partials/` + `assets/`
+
+**Plugin:** `plugin.json` + `frontend/` (HTML/CSS/JS)
+
+```
+./wificities theme add https://github.com/you/your-theme
+./wificities plugin add https://github.com/you/your-plugin
+```
 
 ## Requirements
 
@@ -72,13 +85,10 @@ Want raw HTML? Pick `(none)` as theme during init.
 - ESP32 board (tested with ESP-WROOM-32)
 - USB cable
 
-Everything else is handled by `./wificities`.
-
 ## Uninstall
 
 ```
-./wificities uninstall    # removes venv, build cache
-rm -rf wificities/        # remove the whole thing
+./wificities uninstall
 ```
 
 Nothing is installed system-wide. Delete the folder and it's gone.

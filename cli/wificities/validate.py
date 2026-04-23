@@ -5,7 +5,8 @@ from pathlib import Path
 
 import click
 
-from .themes import get_themes_dir, load_theme_json
+from .themes import get_theme_dir
+from .registry import get_installed_dir
 from .project import enter_project_dir
 
 
@@ -54,10 +55,9 @@ def validate_cmd():
 
         if mode == "theme":
             theme_name = manifest.get("theme", "")
-            themes_dir = get_themes_dir()
-            theme_dir = themes_dir / theme_name
+            theme_dir = get_theme_dir(project_dir, theme_name)
 
-            if theme_dir.exists():
+            if theme_dir:
                 click.echo(f"\u2705 Theme '{theme_name}' found")
             else:
                 click.echo(f"\u274c  Theme '{theme_name}' not found")
@@ -76,7 +76,7 @@ def validate_cmd():
 
                 # Check template exists in theme
                 tmpl = page_def.get("template")
-                if tmpl and theme_dir.exists():
+                if tmpl and theme_dir:
                     tmpl_path = theme_dir / "templates" / f"{tmpl}.html"
                     if not tmpl_path.exists():
                         click.echo(f"\u274c  Template '{tmpl}' not found in theme")

@@ -13,7 +13,8 @@ except ImportError:
 
 from . import __version__
 from .template_engine import render
-from .themes import get_themes_dir, load_theme_json
+from .themes import load_theme_json, ensure_theme, get_theme_dir
+from .registry import get_installed_dir
 from .project import enter_project_dir
 
 
@@ -89,14 +90,14 @@ def _build_theme_mode(project_dir: Path, build_dir: Path,
                       manifest: dict):
     """Build a theme-mode project."""
     theme_name = manifest.get("theme", "")
-    themes_dir = get_themes_dir()
-    theme_dir = themes_dir / theme_name
 
-    if not theme_dir.exists():
-        click.echo(f"Error: Theme '{theme_name}' not found at {theme_dir}")
+    # Ensure theme is installed (clones from git if missing)
+    theme_dir = ensure_theme(project_dir, theme_name)
+    if theme_dir is None:
+        click.echo(f"Error: Theme '{theme_name}' not found. Run: ./wificities theme add {theme_name}")
         raise SystemExit(1)
 
-    theme_json = load_theme_json(theme_name)
+    theme_json = load_theme_json(project_dir, theme_name)
     if not theme_json:
         click.echo(f"Error: Could not load theme.json for '{theme_name}'")
         raise SystemExit(1)
@@ -259,19 +260,13 @@ def _process_plugins(project_dir: Path, build_dir: Path,
     if not plugins:
         return
 
-    plugins_dir = _get_plugins_dir()
     public_dir = build_dir / "public"
 
     for plugin_name in plugins:
-        plugin_dir = plugins_dir / plugin_name
+        plugin_dir = get_installed_dir(project_dir, "plugins", plugin_name)
         if not plugin_dir.exists():
-            # Check local cache
-            local_cache = project_dir / ".wificities" / "plugins" / plugin_name
-            if local_cache.exists():
-                plugin_dir = local_cache
-            else:
-                click.echo(f"  Warning: Plugin '{plugin_name}' not found")
-                continue
+            click.echo(f"  Warning: Plugin '{plugin_name}' not installed. Run: ./wificities plugin add {plugin_name}")
+            continue
 
         # Copy frontend assets
         frontend_dir = plugin_dir / "frontend"
@@ -299,25 +294,20 @@ def _load_plugin_partials(project_dir: Path,
     """Load HTML partials from installed plugins."""
     partials = {}
     plugins = manifest.get("plugins", {})
-    plugins_dir = _get_plugins_dir()
 
     for plugin_name in plugins:
-        plugin_dir = plugins_dir / plugin_name
-        local_cache = project_dir / ".wificities" / "plugins" / plugin_name
+        plugin_dir = get_installed_dir(project_dir, "plugins", plugin_name)
+        if not plugin_dir.exists():
+            continue
 
-        for d in (plugin_dir, local_cache):
-            if d.exists():
-                plugin_json_path = d / "plugin.json"
-                if plugin_json_path.exists():
-                    pjson = json.loads(
-                        plugin_json_path.read_text(encoding="utf-8"))
-                    html_file = pjson.get("frontend", {}).get("html")
-                    if html_file:
-                        html_path = d / html_file
-                        if html_path.exists():
-                            partials[plugin_name] = html_path.read_text(
-                                encoding="utf-8")
-                break
+        pjson_path = plugin_dir / "plugin.json"
+        if pjson_path.exists():
+            pjson = json.loads(pjson_path.read_text(encoding="utf-8"))
+            html_file = pjson.get("frontend", {}).get("html")
+            if html_file:
+                html_path = plugin_dir / html_file
+                if html_path.exists():
+                    partials[plugin_name] = html_path.read_text(encoding="utf-8")
 
     return partials
 
@@ -350,13 +340,6 @@ def _markdown_to_html(text: str) -> str:
                 block = re.sub(r'\*(.+?)\*', r'<em>\1</em>', block)
                 parts.append(f"<p>{block}</p>")
         return "\n".join(parts)
-
-
-def _get_plugins_dir() -> Path:
-    """Get the built-in plugins directory."""
-    # Walk up from CLI package to find the repo root
-    cli_dir = Path(__file__).resolve().parent.parent.parent
-    return cli_dir / "plugins"
 
 
 def _dir_size(path: Path) -> int:

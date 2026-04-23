@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from .themes import get_themes_dir, load_theme_json
+from .themes import load_theme_json
 from .project import enter_project_dir
 
 
@@ -110,7 +110,7 @@ def _save_manifest(project_dir: Path, wf: dict):
 
 def _get_theme_data(project_dir: Path) -> dict | None:
     wf = _load_manifest(project_dir)
-    return load_theme_json(wf.get("theme", "default"))
+    return load_theme_json(project_dir, wf.get("theme", "default"))
 
 
 def _show_palettes(project_dir: Path):

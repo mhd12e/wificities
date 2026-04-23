@@ -1,24 +1,19 @@
-"""wificities plugin — manage plugins."""
+"""wificities plugin — manage plugins via git repos."""
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import click
 
-from .project import enter_project_dir
-
-
-def _get_plugins_dir() -> Path:
-    """Get the built-in plugins directory."""
-    cli_dir = Path(__file__).resolve().parent.parent.parent
-    return cli_dir / "plugins"
+from .project import enter_project_dir, find_project_dir
+from .registry import (
+    resolve_repo_url, clone_or_update, remove_package,
+    get_installed_dir, list_registry,
+)
 
 
 def _get_firmware_dir() -> Path:
-    """Get the firmware directory."""
-    cli_dir = Path(__file__).resolve().parent.parent.parent
-    return cli_dir / "firmware"
+    from .registry import _repo_root
+    return _repo_root() / "firmware"
 
 
 @click.group("plugin")
@@ -30,53 +25,28 @@ def plugin_group():
 @plugin_group.command("list")
 def plugin_list():
     """List available and installed plugins."""
-    plugins_dir = _get_plugins_dir()
+    click.echo("\n  Available plugins:\n")
 
-    # List available
-    click.echo("\nAvailable plugins:\n")
+    entries = list_registry("plugins")
+    if entries:
+        for name, desc, verified in entries:
+            v = " [verified]" if verified else ""
+            click.echo(f"    {name:25s} {desc}{v}")
+    else:
+        click.echo("    No plugins in registry.")
 
-    frontend_plugins = []
-    backend_plugins = []
-
-    if plugins_dir.exists():
-        for d in sorted(plugins_dir.iterdir()):
-            if d.is_dir() and (d / "plugin.json").exists():
-                try:
-                    data = json.loads(
-                        (d / "plugin.json").read_text(encoding="utf-8"))
-                    entry = (d.name, data.get("description", ""),
-                             data.get("type", "frontend"))
-                    if entry[2] == "backend":
-                        backend_plugins.append(entry)
-                    else:
-                        frontend_plugins.append(entry)
-                except (json.JSONDecodeError, OSError):
-                    pass
-
-    if frontend_plugins:
-        click.echo("  FRONTEND")
-        for name, desc, _ in frontend_plugins:
-            click.echo(f"    {name:25s} {desc}")
-
-    if backend_plugins:
-        click.echo("\n  BACKEND")
-        for name, desc, _ in backend_plugins:
-            click.echo(f"    {name:25s} {desc}")
-
-    if not frontend_plugins and not backend_plugins:
-        click.echo("  No plugins found.")
-
-    # List installed (if inside a project)
-    from .project import find_project_dir
     proj = find_project_dir()
-    wificities_json = (proj / "wificities.json") if proj else None
-    if wificities_json and wificities_json.exists():
-        manifest = json.loads(wificities_json.read_text(encoding="utf-8"))
-        installed = manifest.get("plugins", {})
-        if installed:
-            click.echo("\n  INSTALLED in this project:")
-            for name, version in installed.items():
-                click.echo(f"    {name:25s} {version}")
+    if proj:
+        wf_path = proj / "wificities.json"
+        if wf_path.exists():
+            wf = json.loads(wf_path.read_text(encoding="utf-8"))
+            installed = wf.get("plugins", {})
+            if installed:
+                click.echo("\n  Installed:\n")
+                for name in installed:
+                    exists = get_installed_dir(proj, "plugins", name).exists()
+                    status = "ok" if exists else "missing"
+                    click.echo(f"    {name:25s} ({status})")
 
     click.echo()
 
@@ -84,194 +54,142 @@ def plugin_list():
 @plugin_group.command("add")
 @click.argument("name")
 def plugin_add(name: str):
-    """Add a plugin to the current project."""
+    """Add a plugin. Use a name from the registry or a git URL."""
     project_dir = enter_project_dir()
-    plugins_dir = _get_plugins_dir()
 
-    # Resolve plugin source
-    plugin_source = None
-    source_type = "builtin"
-
-    # Check built-in
-    builtin_path = plugins_dir / name
-    if builtin_path.exists() and (builtin_path / "plugin.json").exists():
-        plugin_source = builtin_path
-
-    # Check local path
-    elif Path(name).exists() and (Path(name) / "plugin.json").exists():
-        plugin_source = Path(name).resolve()
-        source_type = "local"
-
-    # Check git URL
-    elif name.startswith("http"):
-        click.echo(f"  Cloning {name}...")
-        cache_dir = project_dir / ".wificities" / "plugins"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        clone_name = name.split("/")[-1].replace(".git", "")
-        clone_dest = cache_dir / clone_name
-
-        if clone_dest.exists():
-            shutil.rmtree(clone_dest)
-
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", name, str(clone_dest)],
-            capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            click.echo(f"  Failed to clone: {result.stderr[:200]}")
-            raise SystemExit(1)
-
-        plugin_source = clone_dest
-        source_type = "git"
-
-    if plugin_source is None:
-        click.echo(f"Plugin '{name}' not found.")
+    url = resolve_repo_url(name, "plugins")
+    if url is None:
+        click.echo(f"  '{name}' not in registry. Use a git URL:")
+        click.echo(f"  ./wificities plugin add https://github.com/user/repo")
         raise SystemExit(1)
 
-    # Read plugin.json
-    plugin_json = json.loads(
-        (plugin_source / "plugin.json").read_text(encoding="utf-8"))
-    plugin_id = plugin_json.get("id", name)
-    plugin_type = plugin_json.get("type", "frontend")
-    plugin_version = plugin_json.get("version", "1.0.0")
+    # Derive clean name
+    if name.startswith("http") or name.startswith("git@"):
+        plugin_name = name.rstrip("/").split("/")[-1].replace(".git", "")
+        if plugin_name.startswith("wificities-plugin-"):
+            plugin_name = plugin_name[len("wificities-plugin-"):]
+    else:
+        plugin_name = name
 
-    click.echo(f"  Installing {plugin_json.get('name', name)} v{plugin_version} "
-               f"({plugin_type})...")
+    dest = get_installed_dir(project_dir, "plugins", plugin_name)
 
-    # Cache plugin locally
-    cache_dir = project_dir / ".wificities" / "plugins" / plugin_id
-    if source_type != "git":  # git already cloned to cache
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(plugin_source, cache_dir, dirs_exist_ok=True)
+    click.echo(f"  Installing {plugin_name}...")
+    if not clone_or_update(url, dest):
+        click.echo(f"  Failed to clone {url}")
+        raise SystemExit(1)
+
+    # Read plugin.json if it exists
+    pjson_path = dest / "plugin.json"
+    ptype = "frontend"
+    if pjson_path.exists():
+        pdata = json.loads(pjson_path.read_text(encoding="utf-8"))
+        plugin_name = pdata.get("id", plugin_name)
+        ptype = pdata.get("type", "frontend")
 
     # Handle backend plugins
-    if plugin_type == "backend":
-        backend_dir = plugin_source / "backend"
+    if ptype == "backend":
+        backend_dir = dest / "backend"
         if backend_dir.exists():
+            import shutil
             firmware_dir = _get_firmware_dir()
-            dest = firmware_dir / "lib" / "plugins" / plugin_id
-            dest.mkdir(parents=True, exist_ok=True)
-
+            fw_dest = firmware_dir / "lib" / "plugins" / plugin_name
+            fw_dest.mkdir(parents=True, exist_ok=True)
             for f in backend_dir.iterdir():
                 if f.is_file() and f.suffix in (".h", ".cpp", ".c"):
-                    shutil.copy2(f, dest / f.name)
-
-            # Regenerate plugin registry
+                    shutil.copy2(f, fw_dest / f.name)
             _regenerate_registry(firmware_dir)
-            click.echo(f"  Backend source copied. Firmware will be recompiled on next build.")
+            click.echo(f"  Backend plugin — firmware recompiles on next build.")
 
     # Update wificities.json
-    wificities_path = project_dir / "wificities.json"
-    if wificities_path.exists():
-        manifest = json.loads(wificities_path.read_text(encoding="utf-8"))
-    else:
-        manifest = {"mode": "raw", "plugins": {}}
+    wf_path = project_dir / "wificities.json"
+    wf = json.loads(wf_path.read_text(encoding="utf-8")) if wf_path.exists() else {"mode": "raw"}
+    wf.setdefault("plugins", {})[plugin_name] = url
+    wf_path.write_text(json.dumps(wf, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    if "plugins" not in manifest:
-        manifest["plugins"] = {}
-    manifest["plugins"][plugin_id] = plugin_version
-
-    wificities_path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    # Update config.json with plugin defaults
-    config_path = project_dir / "config.json"
-    if config_path.exists() and "config" in plugin_json:
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        if "plugins" not in config:
-            config["plugins"] = {}
-        if plugin_id not in config["plugins"]:
-            defaults = {}
-            for key, val in plugin_json["config"].items():
-                if isinstance(val, dict):
-                    defaults[key] = val.get("default", "")
-                else:
-                    defaults[key] = val
-            config["plugins"][plugin_id] = defaults
-            config_path.write_text(
-                json.dumps(config, indent=2, ensure_ascii=False),
-                encoding="utf-8")
-
-    click.echo(f"\n\u2705 Plugin '{plugin_id}' installed!")
-    if plugin_type == "frontend":
-        click.echo(f"   Use in templates: {{{{> plugin:{plugin_id}}}}}")
-    click.echo(f"   Run './wificities build' to include it in your site.")
+    click.echo(f"\n  Installed: {plugin_name}")
+    if ptype == "frontend":
+        click.echo(f"  Use in templates: {{{{> plugin:{plugin_name}}}}}")
+    click.echo(f"  Run './wificities build' to apply.")
 
 
 @plugin_group.command("remove")
 @click.argument("name")
 def plugin_remove(name: str):
-    """Remove a plugin from the current project."""
+    """Remove a plugin."""
     project_dir = enter_project_dir()
 
-    # Remove from wificities.json
-    wificities_path = project_dir / "wificities.json"
-    if wificities_path.exists():
-        manifest = json.loads(wificities_path.read_text(encoding="utf-8"))
-        plugins = manifest.get("plugins", {})
-        if name in plugins:
-            del plugins[name]
-            wificities_path.write_text(
-                json.dumps(manifest, indent=2, ensure_ascii=False),
-                encoding="utf-8")
+    wf_path = project_dir / "wificities.json"
+    if wf_path.exists():
+        wf = json.loads(wf_path.read_text(encoding="utf-8"))
+        if name in wf.get("plugins", {}):
+            del wf["plugins"][name]
+            wf_path.write_text(json.dumps(wf, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    # Remove cached files
-    cache_dir = project_dir / ".wificities" / "plugins" / name
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
+    remove_package(get_installed_dir(project_dir, "plugins", name))
 
-    # Remove backend source
     firmware_dir = _get_firmware_dir()
     backend_dest = firmware_dir / "lib" / "plugins" / name
     if backend_dest.exists():
+        import shutil
         shutil.rmtree(backend_dest)
         _regenerate_registry(firmware_dir)
 
-    click.echo(f"\u2705 Plugin '{name}' removed.")
+    click.echo(f"  Removed: {name}")
+
+
+@plugin_group.command("update")
+@click.argument("name", required=False)
+def plugin_update(name: str | None):
+    """Update plugins to latest version."""
+    project_dir = enter_project_dir()
+
+    wf_path = project_dir / "wificities.json"
+    if not wf_path.exists():
+        click.echo("  No plugins installed.")
+        return
+
+    wf = json.loads(wf_path.read_text(encoding="utf-8"))
+    plugins = wf.get("plugins", {})
+    targets = {name: plugins[name]} if name and name in plugins else plugins
+
+    for pname, url in targets.items():
+        dest = get_installed_dir(project_dir, "plugins", pname)
+        click.echo(f"  Updating {pname}...")
+        clone_or_update(url, dest)
+        click.echo(f"  {pname} updated.")
 
 
 def _regenerate_registry(firmware_dir: Path):
-    """Regenerate the plugin_registry.h file."""
+    """Regenerate plugin_registry.h for backend plugins."""
     plugins_lib_dir = firmware_dir / "lib" / "plugins"
     registry_path = plugins_lib_dir / "plugin_registry.h"
 
-    # Find all plugins (directories with .cpp files, exclude the registry itself)
     plugins = []
     for d in sorted(plugins_lib_dir.iterdir()):
         if d.is_dir():
-            # Look for plugin.json in the cached plugin dir to get symbol name
-            # or just derive it from directory name
             symbol = d.name.replace("-", "_") + "_plugin"
             plugins.append((d.name, symbol))
 
-    # Generate registry
     lines = [
-        "// AUTO-GENERATED by wificities CLI — do not edit manually",
+        "// AUTO-GENERATED — do not edit",
         "#ifndef PLUGIN_REGISTRY_H",
         "#define PLUGIN_REGISTRY_H",
-        "",
         '#include "plugin_api.h"',
         "",
     ]
 
     if plugins:
-        lines.append("// Plugin extern declarations")
         for _, symbol in plugins:
             lines.append(f"extern WifiCitiesPlugin {symbol};")
-
         lines.append("")
         lines.append("static WifiCitiesPlugin* registered_plugins[] = {")
         for _, symbol in plugins:
             lines.append(f"    &{symbol},")
         lines.append("};")
-        lines.append(f"")
         lines.append(f"static const int PLUGIN_COUNT = {len(plugins)};")
     else:
-        lines.append("// No backend plugins installed.")
-        lines.append("")
         lines.append("static WifiCitiesPlugin* registered_plugins[] = {};")
         lines.append("static const int PLUGIN_COUNT = 0;")
 
-    lines.extend(["", "#endif // PLUGIN_REGISTRY_H", ""])
-
+    lines.extend(["", "#endif", ""])
     registry_path.write_text("\n".join(lines), encoding="utf-8")
