@@ -3,7 +3,7 @@
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-PIP_FLAGS="--user --disable-pip-version-check"
+VENV_DIR="$REPO_DIR/.venv"
 
 echo ""
 echo "  WifiCities — Setup"
@@ -20,22 +20,23 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# ---- Ensure pip ----
-if ! python3 -m pip --version &> /dev/null 2>&1; then
-    echo "  Setting up pip..."
-    python3 -m ensurepip --user 2>/dev/null || \
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --user 2>/dev/null || {
-            echo "  Failed. Run: python3 -m ensurepip --user"; exit 1;
-        }
+# ---- Create venv ----
+if [ ! -d "$VENV_DIR" ]; then
+    echo -n "  Creating virtual environment..."
+    python3 -m venv "$VENV_DIR"
+    echo " done"
 fi
 
-# ---- Install Python deps ----
+# Activate venv for this script
+source "$VENV_DIR/bin/activate"
+
+# ---- Install deps into venv ----
 install_pkg() {
     local pkg="$1"
     local check="${2:-$1}"
     if ! python3 -c "import $check" 2>/dev/null; then
         echo -n "  Installing $pkg..."
-        python3 -m pip install $PIP_FLAGS "$pkg" > /dev/null 2>&1
+        pip install --disable-pip-version-check -q "$pkg" > /dev/null 2>&1
         echo " done"
     fi
 }
@@ -53,43 +54,36 @@ FIRMWARE_BIN="$REPO_DIR/firmware/.pio/build/esp32/firmware.bin"
 if [ ! -f "$FIRMWARE_BIN" ]; then
     echo ""
     echo "  Compiling ESP32 firmware (first time only)..."
-
-    if command -v pio &> /dev/null; then
-        PIO="pio"
-    else
-        PIO="python3 -m platformio"
-    fi
-
     cd "$REPO_DIR/firmware"
-    if $PIO run -e esp32 > /tmp/wificities-build.log 2>&1; then
+    if pio run -e esp32 > /tmp/wificities-build.log 2>&1; then
         echo "  Firmware compiled."
     else
         echo "  Firmware compilation failed. Log:"
         tail -10 /tmp/wificities-build.log
         echo ""
-        echo "  You can retry later: cd firmware && pio run -e esp32"
+        echo "  Retry later: cd firmware && pio run -e esp32"
     fi
     cd "$REPO_DIR"
 fi
 
-# ---- Install 'wificities' command ----
-INSTALL_DIR="$HOME/.local/bin"
-mkdir -p "$INSTALL_DIR"
-
-cat > "$INSTALL_DIR/wificities" << EOF
+# ---- Create 'wificities' command ----
+cat > "$REPO_DIR/wificities" << EOF
 #!/usr/bin/env bash
+source "$VENV_DIR/bin/activate"
 PYTHONPATH="$REPO_DIR/cli" exec python3 -c "from wificities.cli import main; main()" "\$@"
 EOF
-chmod +x "$INSTALL_DIR/wificities"
-cp "$INSTALL_DIR/wificities" "$REPO_DIR/wificities" 2>/dev/null || true
+chmod +x "$REPO_DIR/wificities"
 
-# Ensure PATH
+# Also install to ~/.local/bin for convenience
+INSTALL_DIR="$HOME/.local/bin"
+mkdir -p "$INSTALL_DIR"
+cp "$REPO_DIR/wificities" "$INSTALL_DIR/wificities"
+
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     SHELL_RC=""
     [ -f "$HOME/.bashrc" ]  && SHELL_RC="$HOME/.bashrc"
     [ -f "$HOME/.zshrc" ]   && SHELL_RC="$HOME/.zshrc"
     [ -f "$HOME/.profile" ] && SHELL_RC="$HOME/.profile"
-
     if [ -n "$SHELL_RC" ] && ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
     fi
@@ -99,7 +93,7 @@ fi
 # ---- Check for existing site ----
 if [ -d "$REPO_DIR/my-wificity" ]; then
     echo ""
-    echo "  Site already exists. Run these from anywhere in the repo:"
+    echo "  Site already exists. Commands:"
     echo ""
     echo "    wificities serve       # preview"
     echo "    wificities build       # build"
@@ -112,7 +106,6 @@ fi
 
 # ---- Create site ----
 echo ""
-cd "$REPO_DIR"
 PYTHONPATH="$REPO_DIR/cli" python3 -c "from wificities.cli import main; main()" init my-wificity
 
 echo ""
@@ -127,7 +120,8 @@ echo "    wificities serve     # preview"
 echo "    wificities flash     # flash to ESP32"
 echo "    wificities config    # customize"
 echo ""
-echo "  Run from anywhere inside the wificities/ folder."
+echo "  Works from anywhere in the repo."
+echo "  sudo works too: sudo ./wificities flash"
 echo ""
 echo "  ============================================"
 echo ""

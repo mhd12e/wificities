@@ -6,6 +6,7 @@ build/
 .pio/
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 *.pyo
