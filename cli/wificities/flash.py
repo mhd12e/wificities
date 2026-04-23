@@ -62,7 +62,7 @@ def flash_cmd(port: str | None, board: str, only: str | None):
     build_dir = project_dir / "build"
 
     if not build_dir.exists():
-        click.echo("Error: build/ directory not found. Run 'wificities build' first.")
+        click.echo("Error: build/ directory not found. Run './wificities build' first.")
         raise SystemExit(1)
 
     config = BOARD_CONFIGS[board]
@@ -82,7 +82,7 @@ def flash_cmd(port: str | None, board: str, only: str | None):
         # Flash firmware
         firmware_bin = _get_firmware_bin(board, has_backend_plugins)
         if firmware_bin is None:
-            click.echo("Error: No firmware binary. Run ./quickstart.sh to compile it.")
+            click.echo("Error: No firmware binary. Delete .venv and run ./wificities to reinstall.")
             raise SystemExit(1)
 
         click.echo(f"\nFlashing firmware to {port}...")
@@ -165,7 +165,7 @@ def _get_firmware_bin(board: str, has_backend: bool) -> Path | None:
     try:
         subprocess.run([*pio_cmd, "--version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        click.echo("  PlatformIO not available. Run ./quickstart.sh first.")
+        click.echo("  PlatformIO not available. Delete .venv and run ./wificities to reinstall.")
         return None
 
     click.echo("  This takes ~1 min the first time (downloads ESP32 toolchain)...")
@@ -240,7 +240,7 @@ def _create_littlefs_image(build_dir: Path, config: dict) -> Path | None:
     except ImportError:
         pass
 
-    click.echo("  No LittleFS tool found. Run ./quickstart.sh to install all dependencies.")
+    click.echo("  No LittleFS tool found. Delete .venv and run ./wificities to reinstall.")
     return None
 
 
@@ -274,7 +274,7 @@ def _flash_binary(port: str, config: dict, binary: Path, offset: str):
             click.echo("  Fix: sudo ./wificities flash")
             click.echo("  Or: log out and back in (if you just added yourself to dialout)")
         elif "No module named" in stderr:
-            click.echo("  esptool not found. Run: ./quickstart.sh")
+            click.echo("  esptool not found. Delete .venv and run ./wificities to reinstall.")
         else:
             click.echo(f"  Flash failed: {stderr[:400]}")
         raise SystemExit(1)

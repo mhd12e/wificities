@@ -342,7 +342,7 @@ def serve_cmd(port: int):
         click.echo("  Hot reload enabled (watching for file changes)")
 
     except ImportError:
-        click.echo("  Hot reload unavailable (watchdog not installed). Run ./quickstart.sh")
+        click.echo("  Hot reload unavailable (watchdog not installed).")
 
     # Start server
     server = HTTPServer(("0.0.0.0", port), DevHandler)

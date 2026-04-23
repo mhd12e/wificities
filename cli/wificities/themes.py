@@ -78,7 +78,7 @@ def theme_preview(name: str, port: int):
         click.echo(f"Theme '{name}' not found.")
         raise SystemExit(1)
 
-    click.echo(f"Preview not yet implemented. Use 'wificities init' with the theme and 'wificities serve'.")
+    click.echo(f"Preview not yet implemented. Use './wificities init' with the theme and './wificities serve'.")
 
 
 @theme_group.command("switch")
@@ -156,5 +156,5 @@ def theme_switch(name: str):
 
     click.echo(f"\n\u2705 Switched from '{old_theme}' to '{name}'")
     click.echo(f"   Your content and pages are preserved.")
-    click.echo(f"   Run 'wificities config palette' to pick colors for the new theme.")
-    click.echo(f"   Run 'wificities build' to see changes.")
+    click.echo(f"   Run './wificities config palette' to pick colors for the new theme.")
+    click.echo(f"   Run './wificities build' to see changes.")

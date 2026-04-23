@@ -39,7 +39,7 @@ def require_project_dir() -> Path:
     if project_dir is None:
         import click
         click.echo("Error: No wificity project found.")
-        click.echo("  Run: wificities init <name>")
+        click.echo("  Run: ./wificities init <name>")
         raise SystemExit(1)
     return project_dir
 

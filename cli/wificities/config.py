@@ -388,7 +388,7 @@ def _interactive_config():
         cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False),
                             encoding="utf-8")
 
-    click.echo("\n  Saved. Run: ./wificities build\n")
+    click.echo("\n  Saved. Run ./wificities build to apply.\n")
 
 
 # ====================================================================

@@ -195,7 +195,7 @@ def plugin_add(name: str):
     click.echo(f"\n\u2705 Plugin '{plugin_id}' installed!")
     if plugin_type == "frontend":
         click.echo(f"   Use in templates: {{{{> plugin:{plugin_id}}}}}")
-    click.echo(f"   Run 'wificities build' to include it in your site.")
+    click.echo(f"   Run './wificities build' to include it in your site.")
 
 
 @plugin_group.command("remove")
