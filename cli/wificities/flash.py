@@ -82,8 +82,7 @@ def flash_cmd(port: str | None, board: str, only: str | None):
         # Flash firmware
         firmware_bin = _get_firmware_bin(board, has_backend_plugins)
         if firmware_bin is None:
-            click.echo("Error: No firmware binary available.")
-            click.echo("  Install PlatformIO and run 'wificities build' with backend plugins.")
+            click.echo("Error: No firmware binary. Run ./quickstart.sh to compile it.")
             raise SystemExit(1)
 
         click.echo(f"\nFlashing firmware to {port}...")
@@ -149,6 +148,8 @@ def _has_backend_plugins() -> bool:
 
 def _get_firmware_bin(board: str, has_backend: bool) -> Path | None:
     """Get the firmware binary path. Compiles if needed."""
+    import sys
+
     firmware_dir = Path(__file__).resolve().parent.parent.parent / "firmware"
     pio_build = firmware_dir / ".pio" / "build" / board / "firmware.bin"
 
@@ -156,31 +157,16 @@ def _get_firmware_bin(board: str, has_backend: bool) -> Path | None:
     if pio_build.exists():
         return pio_build
 
-    # Try to compile
+    # Try to compile using the current Python (venv-safe)
     click.echo("  Firmware not compiled yet. Compiling...")
-    pio_cmd = None
-    if shutil.which("pio"):
-        pio_cmd = ["pio"]
-    else:
-        # Try as Python module
-        try:
-            subprocess.run(["python3", "-m", "platformio", "--version"],
-                           capture_output=True, check=True)
-            pio_cmd = ["python3", "-m", "platformio"]
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
+    pio_cmd = [sys.executable, "-m", "platformio"]
 
-    if pio_cmd is None:
-        click.echo("  PlatformIO not installed. Installing...")
-        try:
-            subprocess.run(["python3", "-m", "pip", "install", "--user",
-                            "platformio"], check=True, capture_output=True)
-            pio_cmd = ["python3", "-m", "platformio"]
-        except subprocess.CalledProcessError:
-            click.echo("  Failed to install PlatformIO.")
-            click.echo("  Run: python3 -m pip install --user platformio")
-            click.echo("  Then: cd firmware && pio run -e esp32")
-            return None
+    # Check if platformio is available
+    try:
+        subprocess.run([*pio_cmd, "--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        click.echo("  PlatformIO not available. Run ./quickstart.sh first.")
+        return None
 
     click.echo("  This takes ~1 min the first time (downloads ESP32 toolchain)...")
     try:
@@ -194,12 +180,10 @@ def _get_firmware_bin(board: str, has_backend: bool) -> Path | None:
             click.echo("  Firmware compiled.")
             return pio_build
         else:
-            click.echo(f"  Compilation failed.")
-            if result.stderr:
-                # Show last few lines of error
-                lines = result.stderr.strip().split('\n')
-                for line in lines[-5:]:
-                    click.echo(f"    {line}")
+            click.echo("  Compilation failed:")
+            output = (result.stderr + result.stdout).strip()
+            for line in output.split('\n')[-8:]:
+                click.echo(f"    {line}")
             return None
     except subprocess.TimeoutExpired:
         click.echo("  Compilation timed out.")
@@ -256,57 +240,41 @@ def _create_littlefs_image(build_dir: Path, config: dict) -> Path | None:
     except ImportError:
         pass
 
-    click.echo("  No LittleFS tool found. Install: pip install littlefs-python")
+    click.echo("  No LittleFS tool found. Run ./quickstart.sh to install all dependencies.")
     return None
 
 
 def _flash_binary(port: str, config: dict, binary: Path, offset: str):
     """Flash a binary to the ESP32 using esptool."""
-    try:
-        cmd = [
-            "esptool.py",
-            "--chip", config["chip"],
-            "--port", port,
-            "--baud", "460800",
-            "write_flash",
-            "--flash_mode", config["flash_mode"],
-            "--flash_freq", config["flash_freq"],
-            "--flash_size", config["flash_size"],
-            offset, str(binary),
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            # Try python -m esptool
-            cmd[0] = "python"
-            cmd.insert(1, "-m")
-            cmd.insert(2, "esptool")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+    import sys
 
-        if result.returncode == 0:
-            click.echo("  OK")
+    args = [
+        "--chip", config["chip"],
+        "--port", port,
+        "--baud", "460800",
+        "write_flash",
+        "--flash_mode", config["flash_mode"],
+        "--flash_freq", config["flash_freq"],
+        "--flash_size", config["flash_size"],
+        offset, str(binary),
+    ]
+
+    # Always use the same Python that's running this script (venv-safe)
+    cmd = [sys.executable, "-m", "esptool"] + args
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        click.echo("  OK")
+    else:
+        stderr = result.stderr + result.stdout
+        if "Permission denied" in stderr or "Errno 13" in stderr:
+            click.echo(f"  Permission denied on {port}.")
+            click.echo("")
+            click.echo("  Fix: sudo ./wificities flash")
+            click.echo("  Or: log out and back in (if you just added yourself to dialout)")
+        elif "No module named" in stderr:
+            click.echo("  esptool not found. Run: ./quickstart.sh")
         else:
-            stderr = result.stderr
-            if "Permission denied" in stderr or "Errno 13" in stderr:
-                click.echo(f"  Permission denied on {port}.")
-                click.echo("")
-                click.echo("  Fix: Log out of your desktop session and log back in.")
-                click.echo("  Or run with sudo:  sudo wificities flash")
-                click.echo("")
-                # Check if user is in dialout group
-                import grp
-                try:
-                    dialout = grp.getgrnam("dialout")
-                    import getpass
-                    user = getpass.getuser()
-                    if user not in dialout.gr_mem:
-                        click.echo(f"  Your user isn't in the 'dialout' group. Add it:")
-                        click.echo(f"    sudo usermod -aG dialout {user}")
-                        click.echo(f"  Then log out and back in.")
-                except KeyError:
-                    pass
-            else:
-                click.echo(f"  Flash failed: {stderr[:300]}")
-            raise SystemExit(1)
-    except FileNotFoundError:
-        click.echo("  esptool not found. Install: pip install esptool")
+            click.echo(f"  Flash failed: {stderr[:400]}")
         raise SystemExit(1)

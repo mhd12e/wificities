@@ -46,6 +46,7 @@ install_pkg mistune
 install_pkg esptool
 install_pkg watchdog
 install_pkg platformio
+install_pkg littlefs-python littlefs
 
 echo "  Dependencies OK."
 
