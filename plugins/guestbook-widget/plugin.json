@@ -1,0 +1,15 @@
+{
+  "name": "Guestbook Widget",
+  "id": "guestbook-widget",
+  "description": "A retro guestbook form + entry list. Uses the built-in /api/guestbook endpoint.",
+  "author": "wificities",
+  "version": "1.0.0",
+  "type": "frontend",
+  "frontend": {
+    "html": "frontend/guestbook.html",
+    "css": "frontend/guestbook.css",
+    "js": "frontend/guestbook.js"
+  },
+  "assets": [],
+  "api_dependencies": ["guestbook"]
+}

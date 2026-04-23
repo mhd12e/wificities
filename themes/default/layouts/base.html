@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{site_title}}</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    :root {
+      --bg-primary: {{bg_color}};
+      --bg-secondary: {{bg_secondary}};
+      --text-primary: {{text_color}};
+      --text-secondary: {{text_secondary}};
+      --accent: {{accent_color}};
+      --accent-secondary: {{accent_secondary}};
+      --link: {{link_color}};
+      --link-hover: {{link_hover}};
+      --border: {{border_color}};
+      --header-bg: {{{header_bg}}};
+      --header-accent: {{header_accent}};
+      --font-heading: {{{font_heading}}};
+      --font-body: {{{font_body}}};
+    }
+  </style>
+</head>
+<body>
+
+  {{> header}}
+  {{> nav}}
+
+  <div class="page-wrapper">
+    <table class="layout-table">
+      <tr>
+        {{#if show_sidebar}}
+        <td class="main-content">
+          {{{content}}}
+        </td>
+        <td class="sidebar-cell">
+          {{> sidebar}}
+        </td>
+        {{else}}
+        <td class="main-content">
+          {{{content}}}
+        </td>
+        {{/if}}
+      </tr>
+    </table>
+  </div>
+
+  {{> footer}}
+
+  <a href="/" class="open-in-browser"
+     onclick="window.open('http://'+location.host+'/','_blank');return false;">
+    Open in Browser
+  </a>
+
+</body>
+</html>

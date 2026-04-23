@@ -1,0 +1,17 @@
+<h2 style="font-family:var(--font-heading); color:var(--accent-secondary);">Links</h2>
+
+<div class="links-list">
+  {{#each links}}
+  <div class="link-item">
+    <div class="link-bullet">&#x27a1;&#xfe0f;</div>
+    <div>
+      <a href="{{url}}" class="link-title">{{title}}</a>
+      <div class="link-desc">{{description}}</div>
+    </div>
+  </div>
+  {{/each}}
+</div>
+
+<div class="content-section">
+  {{{content}}}
+</div>

@@ -1,0 +1,39 @@
+<div class="sidebar-box">
+  <div class="sidebar-title">About</div>
+  <div class="sidebar-content">
+    <p><strong>{{owner_name}}</strong></p>
+    <p style="font-size: 0.85em;">{{bio}}</p>
+  </div>
+</div>
+
+<div class="sidebar-box">
+  <div class="sidebar-title">Info</div>
+  <div class="sidebar-content sidebar-info">
+    <p>&#x1f4e1; This site is hosted on an ESP32</p>
+    <p>&#x1f4f6; No internet needed!</p>
+    <p>&#x1f30d; Powered by <strong>WifiCities</strong></p>
+  </div>
+</div>
+
+{{#if show_visitor_counter}}
+<div class="sidebar-box">
+  <div class="sidebar-title">Visitors</div>
+  <div class="sidebar-content">
+    <div id="visitor-counter" class="visitor-counter">
+      Loading...
+    </div>
+    <script>
+      fetch('/api/visitors')
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('visitor-counter').innerHTML =
+            '<span class="counter-num">' + d.total + '</span> visitors' +
+            '<br><span class="counter-current">' + d.current + ' online now</span>';
+        })
+        .catch(() => {
+          document.getElementById('visitor-counter').textContent = '???';
+        });
+    </script>
+  </div>
+</div>
+{{/if}}

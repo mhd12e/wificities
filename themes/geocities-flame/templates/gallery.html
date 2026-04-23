@@ -1,0 +1,16 @@
+<h2>&#x1f5bc;&#xfe0f; Gallery</h2>
+
+<div class="gallery-grid">
+  {{#each images}}
+  <div class="gallery-item">
+    <a href="{{url}}">
+      <img src="{{url}}" alt="{{title}}" class="gallery-thumb">
+    </a>
+    <div class="gallery-caption">{{title}}</div>
+  </div>
+  {{/each}}
+</div>
+
+<div class="content-section">
+  {{{content}}}
+</div>

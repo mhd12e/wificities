@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "wificities"
+version = "1.0.0"
+description = "Build and flash portable personal websites to ESP32"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "WifiCities"}]
+dependencies = [
+    "click>=8.0",
+    "mistune>=3.0",
+    "esptool>=4.0",
+    "watchdog>=3.0",
+]
+
+[project.scripts]
+wificities = "wificities.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["wificities*"]

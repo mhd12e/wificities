@@ -1,0 +1,27 @@
+<div class="welcome-banner">
+  <div class="construction-banner">
+    <span class="blink">&#x1f6a7;</span>
+    UNDER CONSTRUCTION
+    <span class="blink">&#x1f6a7;</span>
+  </div>
+
+  <h1 class="site-title-big">
+    &#x2728; Welcome to {{site_title}}! &#x2728;
+  </h1>
+
+  <div class="marquee-wrapper">
+    <marquee behavior="alternate" scrollamount="3">{{bio}}</marquee>
+  </div>
+
+  <div class="divider"></div>
+</div>
+
+<div class="content-section">
+  {{{content}}}
+</div>
+
+{{#if show_guestbook}}
+<div class="divider"></div>
+<h2>&#x1f4d6; Sign My Guestbook!</h2>
+{{> guestbook}}
+{{/if}}

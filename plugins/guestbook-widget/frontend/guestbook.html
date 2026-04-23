@@ -1,0 +1,31 @@
+<div class="wc-guestbook" id="wc-guestbook">
+  <h3 style="color:#ffff00; font-family:'Comic Sans MS',cursive;">
+    &#x1f4d6; Guestbook
+  </h3>
+
+  <div id="wc-gb-entries" style="max-height:300px; overflow-y:auto;
+    border:2px inset #333; background:#000022; padding:10px; margin-bottom:10px;">
+    <em style="color:#666;">Loading...</em>
+  </div>
+
+  <form id="wc-gb-form" style="background:#000044; border:2px outset #6666cc; padding:12px;">
+    <div style="margin-bottom:8px;">
+      <label style="color:#00ffff; font-family:monospace; font-size:0.9em;">Name:</label><br>
+      <input type="text" id="wc-gb-name" maxlength="32" required
+        style="width:100%; background:#000022; border:2px inset #333;
+        color:#33ff33; font-family:monospace; padding:5px;">
+    </div>
+    <div style="margin-bottom:8px;">
+      <label style="color:#00ffff; font-family:monospace; font-size:0.9em;">Message:</label><br>
+      <textarea id="wc-gb-msg" maxlength="256" rows="3" required
+        style="width:100%; background:#000022; border:2px inset #333;
+        color:#33ff33; font-family:monospace; padding:5px; resize:vertical;"></textarea>
+    </div>
+    <button type="submit"
+      style="background:linear-gradient(#444,#222); color:#00ff00;
+      border:2px outset #666; font-family:monospace; padding:6px 16px; cursor:pointer;">
+      Sign!
+    </button>
+    <span id="wc-gb-error" style="color:#ff4444; font-size:0.85em; margin-left:10px;"></span>
+  </form>
+</div>

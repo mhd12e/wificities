@@ -1,0 +1,41 @@
+<div class="guestbook">
+  <div id="gb-entries" class="gb-entries">
+    <p class="gb-loading"><em>Loading guestbook...</em></p>
+  </div>
+  <form id="gb-form" class="gb-form">
+    <div class="gb-field">
+      <label for="gb-name">Name:</label>
+      <input type="text" id="gb-name" name="name" maxlength="32" placeholder="Your name" required class="gb-input">
+    </div>
+    <div class="gb-field">
+      <label for="gb-message">Message:</label>
+      <textarea id="gb-message" name="message" maxlength="256" rows="3" placeholder="Say something..." required class="gb-input"></textarea>
+    </div>
+    <button type="submit" class="gb-submit">Sign Guestbook</button>
+    <div id="gb-error" class="gb-error"></div>
+  </form>
+</div>
+<script>
+(function(){
+  function load(){
+    fetch('/api/guestbook').then(function(r){return r.json()}).then(function(d){
+      var el=document.getElementById('gb-entries');
+      if(!d.entries||!d.entries.length){el.innerHTML='<p class="gb-empty"><em>No entries yet. Be the first!</em></p>';return;}
+      var h='';for(var i=d.entries.length-1;i>=0;i--){var e=d.entries[i];
+        h+='<div class="gb-entry"><span class="gb-name">'+e.name+'</span>'+
+        '<span class="gb-date">#'+e.id+'</span><div class="gb-msg">'+e.message+'</div></div>';}
+      el.innerHTML=h;
+    }).catch(function(){document.getElementById('gb-entries').innerHTML='<p class="gb-empty"><em>Could not load.</em></p>';});
+  }
+  load();
+  document.getElementById('gb-form').addEventListener('submit',function(ev){
+    ev.preventDefault();var n=document.getElementById('gb-name').value,m=document.getElementById('gb-message').value,err=document.getElementById('gb-error');err.textContent='';
+    fetch('/api/guestbook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,message:m})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(d.ok){document.getElementById('gb-name').value='';document.getElementById('gb-message').value='';load();}
+      else if(d.error==='rate_limited'){err.textContent='Wait '+d.retry_after+'s';}
+      else{err.textContent=d.message||'Error';}
+    }).catch(function(){err.textContent='Connection error.';});
+  });
+})();
+</script>
