@@ -148,55 +148,61 @@ def _has_backend_plugins() -> bool:
 
 
 def _get_firmware_bin(board: str, has_backend: bool) -> Path | None:
-    """Get the firmware binary path."""
-    if has_backend:
-        # Use PlatformIO-compiled firmware
-        firmware_dir = Path(__file__).resolve().parent.parent.parent / "firmware"
-        pio_build = firmware_dir / ".pio" / "build" / board / "firmware.bin"
-        if pio_build.exists():
-            return pio_build
+    """Get the firmware binary path. Compiles if needed."""
+    firmware_dir = Path(__file__).resolve().parent.parent.parent / "firmware"
+    pio_build = firmware_dir / ".pio" / "build" / board / "firmware.bin"
 
-        # Try to compile
-        click.echo("  Compiling firmware with PlatformIO...")
-        try:
-            result = subprocess.run(
-                ["pio", "run", "-e", board],
-                cwd=firmware_dir,
-                capture_output=True, text=True
-            )
-            if result.returncode == 0 and pio_build.exists():
-                return pio_build
-            else:
-                click.echo(f"  PlatformIO build failed: {result.stderr[:200]}")
-                return None
-        except FileNotFoundError:
-            click.echo("  PlatformIO not found. Install it: pip install platformio")
-            return None
+    # Already compiled? Use it.
+    if pio_build.exists():
+        return pio_build
+
+    # Try to compile
+    click.echo("  Firmware not compiled yet. Compiling...")
+    pio_cmd = None
+    if shutil.which("pio"):
+        pio_cmd = ["pio"]
     else:
-        # Use pre-built binary
-        bins_dir = Path(__file__).parent / "firmware_bins"
-        bin_path = bins_dir / f"{board}.bin"
-        if bin_path.exists():
-            return bin_path
-
-        # Fallback: try PlatformIO anyway
-        firmware_dir = Path(__file__).resolve().parent.parent.parent / "firmware"
-        pio_build = firmware_dir / ".pio" / "build" / board / "firmware.bin"
-        if pio_build.exists():
-            return pio_build
-
-        click.echo(f"  Pre-built firmware for {board} not found.")
-        click.echo(f"  Compiling with PlatformIO...")
+        # Try as Python module
         try:
-            result = subprocess.run(
-                ["pio", "run", "-e", board],
-                cwd=firmware_dir,
-                capture_output=True, text=True
-            )
-            if result.returncode == 0 and pio_build.exists():
-                return pio_build
-        except FileNotFoundError:
+            subprocess.run(["python3", "-m", "platformio", "--version"],
+                           capture_output=True, check=True)
+            pio_cmd = ["python3", "-m", "platformio"]
+        except (subprocess.CalledProcessError, FileNotFoundError):
             pass
+
+    if pio_cmd is None:
+        click.echo("  PlatformIO not installed. Installing...")
+        try:
+            subprocess.run(["python3", "-m", "pip", "install", "--user",
+                            "platformio"], check=True, capture_output=True)
+            pio_cmd = ["python3", "-m", "platformio"]
+        except subprocess.CalledProcessError:
+            click.echo("  Failed to install PlatformIO.")
+            click.echo("  Run: python3 -m pip install --user platformio")
+            click.echo("  Then: cd firmware && pio run -e esp32")
+            return None
+
+    click.echo("  This takes ~1 min the first time (downloads ESP32 toolchain)...")
+    try:
+        result = subprocess.run(
+            [*pio_cmd, "run", "-e", board],
+            cwd=firmware_dir,
+            capture_output=True, text=True,
+            timeout=600
+        )
+        if result.returncode == 0 and pio_build.exists():
+            click.echo("  Firmware compiled.")
+            return pio_build
+        else:
+            click.echo(f"  Compilation failed.")
+            if result.stderr:
+                # Show last few lines of error
+                lines = result.stderr.strip().split('\n')
+                for line in lines[-5:]:
+                    click.echo(f"    {line}")
+            return None
+    except subprocess.TimeoutExpired:
+        click.echo("  Compilation timed out.")
         return None
 
 

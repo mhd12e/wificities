@@ -1,133 +1,135 @@
 #!/usr/bin/env bash
-# WifiCities Quick Start
-# Clone the repo, run this, flash your ESP32.
+# WifiCities — One command setup.
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-export PYTHONPATH="$REPO_DIR/cli"
 
 echo ""
-echo "  ============================================"
-echo "    WifiCities — Quick Start"
-echo "  ============================================"
+echo "  WifiCities — Setup"
 echo ""
 
-# --- Check Python ---
+# ---- Python check ----
 if ! command -v python3 &> /dev/null; then
-    echo "  Error: Python 3 is required."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "  Install: brew install python3"
-    elif [ -f /etc/debian_version ]; then
-        echo "  Install: sudo apt install python3"
-    elif [ -f /etc/fedora-release ] || [ -f /etc/redhat-release ]; then
-        echo "  Install: sudo dnf install python3"
-    elif [ -f /etc/arch-release ]; then
-        echo "  Install: sudo pacman -S python"
-    else
-        echo "  Install from: https://python.org"
-    fi
+    echo "  Python 3 is required."
+    if [[ "$OSTYPE" == "darwin"* ]]; then echo "  Run: brew install python3"
+    elif [ -f /etc/debian_version ];    then echo "  Run: sudo apt install python3"
+    elif [ -f /etc/fedora-release ];    then echo "  Run: sudo dnf install python3"
+    elif [ -f /etc/arch-release ];      then echo "  Run: sudo pacman -S python"
+    else echo "  https://python.org"; fi
     exit 1
 fi
 
-# --- Install only essential deps (click + mistune) ---
-echo "  [1/4] Checking dependencies..."
-
-MISSING=""
-python3 -c "import click" 2>/dev/null    || MISSING="$MISSING click"
-python3 -c "import mistune" 2>/dev/null  || MISSING="$MISSING mistune"
-
-if [ -n "$MISSING" ]; then
-    echo "  Installing:$MISSING"
-
-    # Ensure pip
-    if ! python3 -m pip --version &> /dev/null; then
-        echo "  Bootstrapping pip..."
-        python3 -m ensurepip --user 2>/dev/null || {
-            echo "  Trying get-pip.py..."
-            curl -sS https://bootstrap.pypa.io/get-pip.py 2>/dev/null | python3 - --user 2>/dev/null || {
-                echo ""
-                echo "  Could not install pip. Please install manually:"
-                echo "    python3 -m ensurepip --user"
-                echo "  Then re-run this script."
-                exit 1
-            }
+# ---- Ensure pip ----
+if ! python3 -m pip --version &> /dev/null; then
+    echo "  Installing pip..."
+    python3 -m ensurepip --user 2>/dev/null || \
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --user 2>/dev/null || {
+            echo "  Failed to install pip."
+            echo "  Run: python3 -m ensurepip --user"
+            exit 1
         }
-    fi
+fi
 
-    python3 -m pip install --user --quiet $MISSING
+# ---- Install all Python deps ----
+NEED=""
+python3 -c "import click" 2>/dev/null     || NEED="$NEED click"
+python3 -c "import mistune" 2>/dev/null   || NEED="$NEED mistune"
+python3 -c "import esptool" 2>/dev/null   || NEED="$NEED esptool"
+python3 -c "import watchdog" 2>/dev/null  || NEED="$NEED watchdog"
 
-    # Verify
-    FAIL=""
-    python3 -c "import click" 2>/dev/null   || FAIL="$FAIL click"
-    python3 -c "import mistune" 2>/dev/null || FAIL="$FAIL mistune"
-    if [ -n "$FAIL" ]; then
-        echo "  Failed to install:$FAIL"
-        echo "  Try: python3 -m pip install --user$FAIL"
-        exit 1
-    fi
+if [ -n "$NEED" ]; then
+    echo "  Installing:$NEED"
+    python3 -m pip install --user --quiet $NEED
+fi
+
+# ---- Install PlatformIO (needed to compile firmware) ----
+if ! python3 -c "import platformio" 2>/dev/null && ! command -v pio &> /dev/null; then
+    echo "  Installing PlatformIO (compiles ESP32 firmware)..."
+    python3 -m pip install --user --quiet platformio
 fi
 
 echo "  Dependencies OK."
-echo ""
-echo "  NOTE: esptool (for flashing) and watchdog (for hot reload)"
-echo "  will be installed when first needed, or install now:"
-echo "    python3 -m pip install --user esptool watchdog"
 
-# --- Create wrapper command ---
-WRAPPER="$REPO_DIR/wificities"
-cat > "$WRAPPER" << WRAPPER_EOF
+# ---- Compile firmware ----
+FIRMWARE_BIN="$REPO_DIR/firmware/.pio/build/esp32/firmware.bin"
+if [ ! -f "$FIRMWARE_BIN" ]; then
+    echo "  Compiling firmware (first time only, takes a minute)..."
+    cd "$REPO_DIR/firmware"
+    python3 -m platformio run -e esp32 --silent 2>&1 | tail -5
+    cd "$REPO_DIR"
+    if [ -f "$FIRMWARE_BIN" ]; then
+        echo "  Firmware compiled."
+    else
+        echo "  Warning: Firmware compilation failed. You can retry with:"
+        echo "    cd firmware && pio run -e esp32"
+    fi
+fi
+
+# ---- Install 'wificities' command globally ----
+INSTALL_DIR="$HOME/.local/bin"
+mkdir -p "$INSTALL_DIR"
+
+cat > "$INSTALL_DIR/wificities" << EOF
 #!/usr/bin/env bash
 PYTHONPATH="$REPO_DIR/cli" exec python3 -c "from wificities.cli import main; main()" "\$@"
-WRAPPER_EOF
-chmod +x "$WRAPPER"
+EOF
+chmod +x "$INSTALL_DIR/wificities"
 
-export PATH="$REPO_DIR:$PATH"
+# Also keep a local copy
+cp "$INSTALL_DIR/wificities" "$REPO_DIR/wificities" 2>/dev/null || true
 
-# --- Create or resume site ---
-SITE_DIR="$REPO_DIR/my-wificity"
-if [ -d "$SITE_DIR" ]; then
+# Check PATH
+if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
+    # Add to shell rc
+    SHELL_RC=""
+    if [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"
+    elif [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"
+    elif [ -f "$HOME/.profile" ]; then SHELL_RC="$HOME/.profile"; fi
+
+    if [ -n "$SHELL_RC" ]; then
+        if ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        fi
+    fi
+    export PATH="$INSTALL_DIR:$PATH"
+fi
+
+echo ""
+echo "  'wificities' command installed. Works from anywhere."
+
+# ---- Check for existing site ----
+if [ -d "$REPO_DIR/my-wificity" ]; then
     echo ""
-    echo "  Site already exists at my-wificity/"
+    echo "  Site exists at: $REPO_DIR/my-wificity"
     echo ""
     echo "  Commands:"
-    echo "    cd my-wificity"
-    echo "    ../wificities serve        # preview locally"
-    echo "    ../wificities build        # build for ESP32"
-    echo "    ../wificities flash        # flash to ESP32"
+    echo "    cd $REPO_DIR/my-wificity"
+    echo "    wificities serve       # preview"
+    echo "    wificities build       # build"
+    echo "    wificities flash       # flash to ESP32"
     echo ""
     echo "  Start fresh: rm -rf my-wificity && ./quickstart.sh"
     exit 0
 fi
 
+# ---- Create site ----
 echo ""
-echo "  [2/4] Creating your wificity..."
-echo ""
-
 cd "$REPO_DIR"
-"$WRAPPER" init my-wificity
+PYTHONPATH="$REPO_DIR/cli" python3 -c "from wificities.cli import main; main()" init my-wificity
 
 echo ""
-echo "  [3/4] Building..."
-cd "$SITE_DIR"
-"$REPO_DIR/wificities" build
+echo "  Building..."
+cd "$REPO_DIR/my-wificity"
+PYTHONPATH="$REPO_DIR/cli" python3 -c "from wificities.cli import main; main()" build
 
 echo ""
-echo "  [4/4] Done!"
-echo ""
-echo "  ============================================"
-echo "    Preview locally:"
-echo "      cd my-wificity"
-echo "      ../wificities serve"
-echo ""
-echo "    Flash to ESP32:"
-echo "      cd my-wificity"
-echo "      ../wificities flash"
 echo "  ============================================"
 echo ""
-echo "  Customize:"
-echo "    ../wificities config               # menu"
-echo "    ../wificities config palette        # colors"
-echo "    ../wificities config header         # header"
-echo "    ../wificities theme switch <name>   # switch theme"
-echo "    ../wificities plugin add <name>     # add plugin"
+echo "    cd my-wificity"
+echo "    wificities serve     # preview"
+echo "    wificities flash     # flash to ESP32"
+echo ""
+echo "    wificities config    # customize"
+echo ""
+echo "  ============================================"
 echo ""
