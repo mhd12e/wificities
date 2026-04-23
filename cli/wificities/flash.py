@@ -285,7 +285,27 @@ def _flash_binary(port: str, config: dict, binary: Path, offset: str):
         if result.returncode == 0:
             click.echo("  OK")
         else:
-            click.echo(f"  Flash failed: {result.stderr[:300]}")
+            stderr = result.stderr
+            if "Permission denied" in stderr or "Errno 13" in stderr:
+                click.echo(f"  Permission denied on {port}.")
+                click.echo("")
+                click.echo("  Fix: Log out of your desktop session and log back in.")
+                click.echo("  Or run with sudo:  sudo wificities flash")
+                click.echo("")
+                # Check if user is in dialout group
+                import grp
+                try:
+                    dialout = grp.getgrnam("dialout")
+                    import getpass
+                    user = getpass.getuser()
+                    if user not in dialout.gr_mem:
+                        click.echo(f"  Your user isn't in the 'dialout' group. Add it:")
+                        click.echo(f"    sudo usermod -aG dialout {user}")
+                        click.echo(f"  Then log out and back in.")
+                except KeyError:
+                    pass
+            else:
+                click.echo(f"  Flash failed: {stderr[:300]}")
             raise SystemExit(1)
     except FileNotFoundError:
         click.echo("  esptool not found. Install: pip install esptool")
