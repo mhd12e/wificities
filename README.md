@@ -4,67 +4,67 @@ Your own portable website, broadcasting from your pocket.
 
 Turn an ESP32 into a personal website. It broadcasts a WiFi network — when someone connects, your site opens automatically. No internet needed.
 
-Carry it on the bus, at a cafe, on a trip. Anyone nearby can visit your site just by connecting to your WiFi.
-
 ## Setup
 
 ```
 git clone https://github.com/mhd12e/wificities.git
 cd wificities
-./quickstart.sh
+./wificities
 ```
 
-That's it. The script installs everything, walks you through creating your site, and compiles the firmware. When it's done:
+First run installs everything automatically (Python venv, dependencies, compiles firmware). Then:
 
 ```
-cd my-wificity
-wificities serve          # preview at localhost:8080
-wificities flash          # plug in ESP32, flash it
+./wificities init my-site
+./wificities serve
+./wificities flash
 ```
 
-The `wificities` command works from anywhere after setup.
+All commands run from the repo root. No global install, nothing touches your system.
+
+## Commands
+
+```
+./wificities init <name>       # create a new site
+./wificities build             # build for ESP32
+./wificities serve             # preview at localhost:8080
+./wificities flash             # flash to ESP32
+./wificities config            # interactive customization
+./wificities config palette    # change color scheme
+./wificities config header     # change header style
+./wificities config set K V    # set any value
+./wificities theme list        # show themes
+./wificities theme switch X    # change theme
+./wificities plugin list       # show plugins
+./wificities plugin add X      # add a plugin
+./wificities validate          # check for issues
+./wificities uninstall         # remove venv and build cache
+```
 
 ## Customize
 
-```
-wificities config                    # interactive menu
-wificities config palette vaporwave  # change colors
-wificities config header centered    # change header style
-wificities config set bio "hi"       # change any value
-wificities theme switch geocities-flame
-wificities plugin add guestbook-widget
-```
+The interactive config menu lets you change everything:
 
-After changes: `wificities build && wificities flash --only filesystem`
+- **Color palette** — 8 presets: midnight, sunset, ocean, forest, cyberpunk, vaporwave, terminal, newspaper
+- **Individual colors** — tweak any color after picking a palette
+- **Header style** — banner, minimal, or centered
+- **Fonts** — 5 presets or custom CSS fonts
+- **Toggle features** — guestbook, visitor counter, sidebar, marquee, construction banner
+
+After changes: `./wificities build && ./wificities flash --only filesystem`
 
 ## Edit Content
 
-Your site lives in `my-wificity/content/`. Edit the Markdown files:
-
 ```
-my-wificity/
+my-site/
 ├── config.json          # WiFi SSID, settings
 ├── wificities.json      # theme, pages, colors
 └── content/
-    ├── index.md         # homepage
+    ├── index.md         # homepage (Markdown)
     └── about.md         # about page
 ```
 
-Want raw HTML? Run quickstart and pick `(none)` as theme.
-
-## Color Palettes
-
-midnight, sunset, ocean, forest, cyberpunk, vaporwave, terminal, newspaper
-
-## Themes
-
-- `default` — clean retro, 8 palettes, 3 header styles
-- `geocities-flame` — full 1999 GeoCities aesthetic
-
-## Plugins
-
-- `guestbook-widget` — visitors leave messages
-- `visitor-counter` — retro hit counter
+Want raw HTML? Pick `(none)` as theme during init.
 
 ## Requirements
 
@@ -72,15 +72,16 @@ midnight, sunset, ocean, forest, cyberpunk, vaporwave, terminal, newspaper
 - ESP32 board (tested with ESP-WROOM-32)
 - USB cable
 
-Everything else is installed automatically by `./quickstart.sh`.
+Everything else is handled by `./wificities`.
 
-## How It Works
+## Uninstall
 
-1. ESP32 broadcasts a WiFi network with your custom name
-2. A DNS server on the ESP32 catches all requests
-3. Captive portal triggers automatically on iOS, Android, Windows
-4. Your site is served from the ESP32's flash storage
-5. Guestbook entries and visitor count persist across reboots
+```
+./wificities uninstall    # removes venv, build cache
+rm -rf wificities/        # remove the whole thing
+```
+
+Nothing is installed system-wide. Delete the folder and it's gone.
 
 ## License
 
