@@ -3,6 +3,7 @@
 set -e
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIP_FLAGS="--user --disable-pip-version-check"
 
 echo ""
 echo "  WifiCities — Setup"
@@ -20,80 +21,58 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # ---- Ensure pip ----
-if ! python3 -m pip --version &> /dev/null; then
-    echo "  Installing pip..."
+if ! python3 -m pip --version &> /dev/null 2>&1; then
+    echo "  Setting up pip..."
     python3 -m ensurepip --user 2>/dev/null || \
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3 - --user 2>/dev/null || {
-            echo "  Failed to install pip."
-            echo "  Run: python3 -m ensurepip --user"
-            exit 1
+            echo "  Failed. Run: python3 -m ensurepip --user"; exit 1;
         }
 fi
 
-# ---- Install Python deps one by one with status ----
-install_if_missing() {
+# ---- Install Python deps ----
+install_pkg() {
     local pkg="$1"
-    local import_name="${2:-$1}"
-    if ! python3 -c "import $import_name" 2>/dev/null; then
-        echo -n "  Installing $pkg... "
-        python3 -m pip install --user "$pkg" --progress-bar on 2>&1 | tail -1
+    local check="${2:-$1}"
+    if ! python3 -c "import $check" 2>/dev/null; then
+        echo -n "  Installing $pkg..."
+        python3 -m pip install $PIP_FLAGS "$pkg" > /dev/null 2>&1
+        echo " done"
     fi
 }
 
-install_if_missing click
-install_if_missing mistune
-install_if_missing esptool
-install_if_missing watchdog
-install_if_missing platformio
+install_pkg click
+install_pkg mistune
+install_pkg esptool
+install_pkg watchdog
+install_pkg platformio
 
-echo "  All dependencies installed."
+echo "  Dependencies OK."
 
 # ---- Compile firmware ----
 FIRMWARE_BIN="$REPO_DIR/firmware/.pio/build/esp32/firmware.bin"
 if [ ! -f "$FIRMWARE_BIN" ]; then
     echo ""
-    echo "  Compiling firmware (first time only)..."
-    echo "  This downloads the ESP32 toolchain and compiles. ~2 min."
-    echo ""
-    cd "$REPO_DIR/firmware"
+    echo "  Compiling ESP32 firmware (first time only)..."
 
-    # Use pio or python -m platformio
     if command -v pio &> /dev/null; then
         PIO="pio"
     else
         PIO="python3 -m platformio"
     fi
 
-    $PIO run -e esp32 2>&1 | while IFS= read -r line; do
-        # Show only meaningful lines, skip noise
-        case "$line" in
-            *"Platform Manager"*|*"Installing"*|*"Downloading"*|*"Unpacking"*)
-                echo "  $line" ;;
-            *"Compiling"*)
-                echo -ne "\r  Compiling...          " ;;
-            *"Linking"*)
-                echo -ne "\r  Linking...            " ;;
-            *"Building"*)
-                echo -ne "\r  Building filesystem..." ;;
-            *"SUCCESS"*|*"success"*)
-                echo -e "\r  Firmware compiled.     " ;;
-            *"Error"*|*"error"*|*"FAILED"*)
-                echo "  $line" ;;
-        esac
-    done
-
-    cd "$REPO_DIR"
-
-    if [ ! -f "$FIRMWARE_BIN" ]; then
+    cd "$REPO_DIR/firmware"
+    if $PIO run -e esp32 > /tmp/wificities-build.log 2>&1; then
+        echo "  Firmware compiled."
+    else
+        echo "  Firmware compilation failed. Log:"
+        tail -10 /tmp/wificities-build.log
         echo ""
-        echo "  Warning: Firmware compilation may have failed."
-        echo "  You can retry: cd firmware && pio run -e esp32"
-        echo "  Continuing with site setup..."
-        echo ""
+        echo "  You can retry later: cd firmware && pio run -e esp32"
     fi
+    cd "$REPO_DIR"
 fi
 
-# ---- Install 'wificities' command globally ----
+# ---- Install 'wificities' command ----
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
@@ -102,23 +81,17 @@ cat > "$INSTALL_DIR/wificities" << EOF
 PYTHONPATH="$REPO_DIR/cli" exec python3 -c "from wificities.cli import main; main()" "\$@"
 EOF
 chmod +x "$INSTALL_DIR/wificities"
-
-# Also keep a local copy
 cp "$INSTALL_DIR/wificities" "$REPO_DIR/wificities" 2>/dev/null || true
 
-# Ensure ~/.local/bin is in PATH
+# Ensure PATH
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     SHELL_RC=""
-    if [ -f "$HOME/.bashrc" ]; then SHELL_RC="$HOME/.bashrc"
-    elif [ -f "$HOME/.zshrc" ]; then SHELL_RC="$HOME/.zshrc"
-    elif [ -f "$HOME/.profile" ]; then SHELL_RC="$HOME/.profile"; fi
+    [ -f "$HOME/.bashrc" ]  && SHELL_RC="$HOME/.bashrc"
+    [ -f "$HOME/.zshrc" ]   && SHELL_RC="$HOME/.zshrc"
+    [ -f "$HOME/.profile" ] && SHELL_RC="$HOME/.profile"
 
-    if [ -n "$SHELL_RC" ]; then
-        if ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
-            echo "  Added ~/.local/bin to PATH in $SHELL_RC"
-            echo "  Run 'source $SHELL_RC' or open a new terminal for it to take effect."
-        fi
+    if [ -n "$SHELL_RC" ] && ! grep -q '.local/bin' "$SHELL_RC" 2>/dev/null; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
     fi
     export PATH="$INSTALL_DIR:$PATH"
 fi
@@ -126,11 +99,12 @@ fi
 # ---- Check for existing site ----
 if [ -d "$REPO_DIR/my-wificity" ]; then
     echo ""
-    echo "  Site exists at: $REPO_DIR/my-wificity"
+    echo "  Site already exists. Run these from anywhere in the repo:"
     echo ""
-    echo "    cd my-wificity"
-    echo "    wificities serve"
-    echo "    wificities flash"
+    echo "    wificities serve       # preview"
+    echo "    wificities build       # build"
+    echo "    wificities flash       # flash to ESP32"
+    echo "    wificities config      # customize"
     echo ""
     echo "  Start fresh: rm -rf my-wificity && ./quickstart.sh"
     exit 0
@@ -149,10 +123,11 @@ PYTHONPATH="$REPO_DIR/cli" python3 -c "from wificities.cli import main; main()" 
 echo ""
 echo "  ============================================"
 echo ""
-echo "    cd my-wificity"
 echo "    wificities serve     # preview"
 echo "    wificities flash     # flash to ESP32"
 echo "    wificities config    # customize"
+echo ""
+echo "  Run from anywhere inside the wificities/ folder."
 echo ""
 echo "  ============================================"
 echo ""

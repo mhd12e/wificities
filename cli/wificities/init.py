@@ -195,7 +195,6 @@ def init_cmd(name: str, theme: str | None, raw: bool):
         click.echo(f"   public/index.html")
 
     click.echo(f"\nNext steps:")
-    click.echo(f"  cd {name}")
     click.echo(f"  wificities serve        # preview locally")
     click.echo(f"  wificities build        # build for ESP32")
     click.echo(f"  wificities flash        # flash to ESP32")

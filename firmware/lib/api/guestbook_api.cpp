@@ -40,8 +40,13 @@ void GuestbookAPI::registerRoutes(AsyncWebServer* server) {
     );
 
     // POST /api/guestbook
-    auto* gbPost = new AsyncCallbackJsonWebHandler("/api/guestbook",
-        [this](AsyncWebServerRequest* request, JsonVariant& json) {
+    server->on("/api/guestbook", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            // Body handler below does the work; this is needed for the signature
+        },
+        NULL,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len,
+               size_t index, size_t total) {
             // Rate limit check
             String remoteIP = request->client()->remoteIP().toString();
             if (_isRateLimited(remoteIP)) {
@@ -55,7 +60,9 @@ void GuestbookAPI::registerRoutes(AsyncWebServer* server) {
                 return;
             }
 
-            JsonObject body = json.as<JsonObject>();
+            JsonDocument body;
+            deserializeJson(body, (char*)data, len);
+
             String name = body["name"] | "";
             String message = body["message"] | "";
 
@@ -104,7 +111,6 @@ void GuestbookAPI::registerRoutes(AsyncWebServer* server) {
             request->send(201, "application/json", output);
         }
     );
-    server->addHandler(gbPost);
 
     // DELETE /api/guestbook (clear all)
     server->on("/api/guestbook", HTTP_DELETE,
@@ -183,7 +189,7 @@ JsonDocument GuestbookAPI::_readEntries() {
         deserializeJson(doc, f);
         f.close();
     }
-    if (!doc.containsKey("entries")) {
+    if (!doc["entries"].is<JsonArray>()) {
         doc["entries"] = doc.to<JsonArray>();
         doc["next_id"] = 1;
     }
